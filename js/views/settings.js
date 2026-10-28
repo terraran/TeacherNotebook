@@ -2,7 +2,7 @@
 
 import { html, DAY_ABBR, DAY_FULL, uid, toMin } from '../util.js';
 import { col, types, terms } from '../model.js';
-import { getData, patch, mode, getUser, signOut, replaceAll } from '../store.js';
+import { getData, patch, mode, getUser, signOut, replaceAll, getSheetUrl, reload } from '../store.js';
 import { formDialog, updatedFlags, pendingTag, typeLabel } from '../ui.js';
 import { pickAndImport } from './setup.js';
 import { getThemePrefs, setAutoNight } from '../theme.js';
@@ -195,12 +195,14 @@ export function renderSettings(root) {
 
   <section class="sec"><h2>บัญชีและข้อมูล</h2>
     <div class="sub">${mode === 'local'
-      ? 'โหมดในเครื่อง: ข้อมูลอยู่ในเบราว์เซอร์นี้เท่านั้น ยังไม่ซิงก์กับมือถือ (ใส่ค่า Firebase ใน js/firebase-config.js เพื่อเปิดใช้)'
-      : html`เข้าสู่ระบบเป็น ${user?.email || user?.displayName} · ข้อมูลซิงก์ผ่าน Firebase`}</div>
+      ? 'โหมดในเครื่อง: ข้อมูลอยู่ในเบราว์เซอร์นี้เท่านั้น ยังไม่ซิงก์กับมือถือ (ใส่ sheetsUrl ใน js/config.js เพื่อใช้ Google Sheet)'
+      : html`เข้าสู่ระบบเป็น ${user?.email || user?.displayName} · ข้อมูลอยู่ใน Google Sheet · เครื่องอื่นจะเห็นการแก้เมื่อเปิดหรือสลับกลับมาที่แอป`}</div>
     <div class="sub">นำเข้าครั้งแรกเมื่อ ${data.meta?.importedAt ? new Date(data.meta.importedAt).toLocaleString('th-TH') : '—'}</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn" data-reimport>นำเข้าไฟล์ใหม่ (แทนที่ทั้งหมด)</button>
-      ${mode === 'firebase' ? html`<button class="btn" data-signout>ออกจากระบบ</button>` : ''}
+      ${mode === 'sheets' ? html`<button class="btn" data-reload>โหลดจากชีตใหม่</button>` : ''}
+      ${getSheetUrl() ? html`<a class="btn" href="${getSheetUrl()}" target="_blank" rel="noopener" style="text-decoration:none">เปิด Google Sheet</a>` : ''}
+      ${mode === 'sheets' ? html`<button class="btn" data-signout>ออกจากระบบ</button>` : ''}
     </div>
   </section>
 
@@ -260,6 +262,7 @@ export function renderSettings(root) {
     if ('reimport' in ds) {
       if (confirm('นำเข้าไฟล์ใหม่จะแทนที่ข้อมูลทั้งหมด (รวมรายการที่เพิ่มเองและโน้ต) ทำต่อไหม?')) pickAndImport(replaceAll);
     } else if ('signout' in ds) signOut();
+    else if ('reload' in ds) reload();
     else if ('addTerm' in ds) termForm();
     else if (ds.term) termForm(ds.term);
     else if ('addSpecial' in ds) specialForm();

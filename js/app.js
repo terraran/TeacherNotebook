@@ -1,7 +1,8 @@
 // Entry: auth → first-run import → router.
 
 import { html } from './util.js';
-import { initStore, getData, getUser, onChange, mode, signIn, replaceAll } from './store.js';
+import { initStore, getData, getUser, onChange, onStatus, hasLoaded, mode, renderSignInButton, replaceAll } from './store.js';
+import { openDialog, closeDialog } from './ui.js';
 import { applyTheme, toggleTheme } from './theme.js';
 import { renderHome, tickHome, refreshHome } from './views/home.js';
 import { renderCalendar, setCalendarParams } from './views/calendar.js';
@@ -33,9 +34,14 @@ function render() {
   if (!user) {
     nav.hidden = true;
     main.innerHTML = html`<div class="center"><div class="card">
-      <h1>สมุดครู</h1><p class="muted" style="margin:0">เข้าสู่ระบบเพื่อใช้ข้อมูลชุดเดียวกันบนมือถือและคอม</p>
-      <button class="btn primary" data-signin>เข้าสู่ระบบด้วย Google</button></div></div>`.__raw;
-    main.querySelector('[data-signin]').onclick = () => signIn().catch((e) => alert(e.message));
+      <h1>สมุดครู</h1><p class="muted" style="margin:0">เข้าสู่ระบบด้วย Google เพื่อเปิดข้อมูลใน Google Sheet ชุดเดียวกันบนมือถือและคอม</p>
+      <div data-gsi style="min-height:44px"></div></div></div>`.__raw;
+    renderSignInButton(main.querySelector('[data-gsi]')).catch((e) => alert(e.message));
+    return;
+  }
+  if (!getData()?.settings && !hasLoaded()) {
+    nav.hidden = true;
+    main.innerHTML = '<div class="center muted">กำลังโหลดจาก Google Sheet…</div>';
     return;
   }
   if (!getData()?.settings) {
@@ -52,6 +58,30 @@ function render() {
   ROUTES[route](main);
 }
 
+const STATUS = { loading: 'กำลังโหลดจากชีต…', saving: 'กำลังบันทึก…', saved: 'บันทึกแล้ว', error: 'บันทึกไม่สำเร็จ', idle: '' };
+let statusTimer;
+let signinOpen = false;
+function showStatus(s) {
+  clearTimeout(statusTimer);
+  if (s === 'signin') {
+    modeNote.textContent = 'รอเข้าสู่ระบบ';
+    // token expired and silent sign-in didn't happen: ask once
+    signinOpen = true;
+    openDialog(
+      html`<h2>เข้าสู่ระบบอีกครั้ง</h2><p class="muted" style="margin:0">การเข้าสู่ระบบหมดอายุ รายการที่แก้ไว้จะบันทึกต่อหลังเข้าสู่ระบบ</p>
+        <div data-gsi style="min-height:44px"></div>`,
+      (d) => renderSignInButton(d.querySelector('[data-gsi]')),
+    );
+    return;
+  }
+  if (signinOpen) {
+    signinOpen = false;
+    closeDialog();
+  }
+  modeNote.textContent = STATUS[s] ?? '';
+  if (s === 'saved') statusTimer = setTimeout(() => (modeNote.textContent = ''), 2500);
+}
+
 function onData() {
   // Don't yank the user out of an open dialog; views re-render underneath it.
   if (current === 'home' && getData()?.settings) return refreshHome(main);
@@ -62,6 +92,7 @@ async function start() {
   paintThemeBtn(applyTheme());
   themeBtn.onclick = () => paintThemeBtn(toggleTheme());
   if (mode === 'local') modeNote.textContent = 'โหมดในเครื่อง';
+  onStatus(showStatus);
   main.innerHTML = '<div class="center muted">กำลังโหลด…</div>';
   onChange(onData);
   await initStore();
